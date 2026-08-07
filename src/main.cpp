@@ -2,6 +2,7 @@
 #include <ESP8266WebServer.h>
 #include <LittleFS.h>
 
+#include "config/DeviceSettings.h"
 #include "core/WifiService.h"
 #include "routes/ApiRoutes.h"
 #include "hardware/CoinGate.h"
@@ -27,17 +28,18 @@ void setup()
   }
   Serial.println("LittleFS ready");
 
+  DeviceSettings::begin();
   SessionContext::begin();
   HttpTaskQueue::begin();
   CoinGate::begin();
   CoinDetector::begin();
+  RegistrationService::begin();
 
   WifiService::connect();
+
   TimeService::begin();
-  RegistrationService::begin();
   HeartbeatService::begin();
 
-  // Register custom headers for HMAC verification
   server.collectHeaders("X-SIGNATURE", "X-TIMESTAMP");
 
   ApiRoutes::registerRoutes(server);
@@ -51,6 +53,7 @@ void setup()
 void loop()
 {
   server.handleClient();
+  WifiService::loop();
 
   if (CoinService::isAccepting())
   {
@@ -62,14 +65,11 @@ void loop()
     }
   }
 
-  // Process accumulated pulses (sends after timeout)
   CoinService::loop();
 
-  // Retry time sync if not ready
   TimeService::retryIfNeeded();
 
-  // Only run services after time is synced
-  if (TimeService::isReady()) {
+  if (TimeService::isReady() && WifiService::isConnected()) {
       RegistrationService::loop();
       HeartbeatService::loop();
       SenderService::loop();

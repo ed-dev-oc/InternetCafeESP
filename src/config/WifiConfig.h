@@ -1,10 +1,9 @@
 #pragma once
-#include <ESP8266WiFi.h>
-#include "local_credentials.h"
 
-// STATIC IP
-IPAddress LOCAL_IP(192, 168, 1, 254);
-IPAddress GATEWAY(192, 168, 1, 1);
-IPAddress SUBNET(255, 255, 255, 0);
-IPAddress PRIMARY_DNS(192, 168, 1, 1);
-IPAddress SECONDARY_DNS(1, 1, 1, 1);
+#include <ESP8266WiFi.h>
+
+// Setup access point network defaults.
+// Runtime Wi-Fi credentials live in DeviceSettings.
+static const IPAddress SETUP_AP_IP(192, 168, 4, 1);
+static const IPAddress SETUP_AP_GATEWAY(192, 168, 4, 1);
+static const IPAddress SETUP_AP_SUBNET(255, 255, 255, 0);

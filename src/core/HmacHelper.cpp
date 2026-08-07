@@ -16,7 +16,6 @@ static String computeHmac(const String& secret, const String& data) {
     uint8_t out[32];
     br_hmac_out(&ctx, out);
     
-    // Build hex string directly into buffer (no temporary Strings)
     char sig[65];
     for (int i = 0; i < 32; i++) {
         snprintf(sig + i * 2, 3, "%02x", out[i]);
@@ -29,8 +28,8 @@ namespace HmacHelper {
     bool verifyRequest(ESP8266WebServer& server, const String& body)
     {
         if (!RegistrationService::isRegistered()) {
-            Serial.println("[HMAC] Not registered, skipping verification");
-            return true;
+            Serial.println("[HMAC] refusing request because device is not registered");
+            return false;
         }
 
         String signature = server.header("X-SIGNATURE");
@@ -41,7 +40,6 @@ namespace HmacHelper {
             return false;
         }
 
-        // Validate timestamp freshness (prevent replay attacks)
         unsigned long ts = timestamp.toInt();
         unsigned long now = TimeService::getServerTime();
         if (abs((long)(now - ts)) > MAX_TIMESTAMP_AGE_MS / 1000) {
@@ -49,12 +47,8 @@ namespace HmacHelper {
             return false;
         }
 
-        // Build canonical message: METHOD|PATH|TIMESTAMP|BODY
-        // Method is "SERVER" for server-initiated requests
         String path = server.uri();
-        char data[256];
-        snprintf(data, sizeof(data), "SERVER|%s|%s|%s",
-                 path.c_str(), timestamp.c_str(), body.c_str());
+        String data = String("SERVER|") + path + "|" + timestamp + "|" + body;
         
         String secret = RegistrationService::getSecret();
         String expected = computeHmac(secret, data);
@@ -74,9 +68,7 @@ namespace HmacHelper {
     String generateSignature(const String& secret, const String& method,
                              const String& path, const String& timestamp,
                              const String& body) {
-        char data[256];
-        snprintf(data, sizeof(data), "%s|%s|%s|%s",
-                 method.c_str(), path.c_str(), timestamp.c_str(), body.c_str());
+        String data = method + "|" + path + "|" + timestamp + "|" + body;
         return computeHmac(secret, data);
     }
 }

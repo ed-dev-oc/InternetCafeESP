@@ -1,7 +1,7 @@
 #include "TimeService.h"
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
-#include "../config/DeviceConfig.h"
+#include "../config/DeviceSettings.h"
 #include <ESP8266WiFi.h>
 
 long TimeService::baseServerTime = 0;
@@ -15,9 +15,15 @@ void TimeService::begin() {
         return;
     }
 
+    String serverUrl = DeviceSettings::serverUrl();
+    if (serverUrl.length() == 0) {
+        Serial.println("[TIME] server URL missing, skipping");
+        return;
+    }
+
     WiFiClient client;
     HTTPClient http;
-    String url = String(SERVER_URL) + "/api/server_time";
+    String url = serverUrl + "/api/server_time";
 
     http.begin(client, url);
     http.addHeader("Content-Type", "application/json");

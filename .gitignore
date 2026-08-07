@@ -4,5 +4,4 @@
 .vscode/launch.json
 .vscode/ipch
 
-# Sensitive configuration
-src/config/local_credentials.cpp
+.plan

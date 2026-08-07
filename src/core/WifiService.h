@@ -1,34 +1,22 @@
 #pragma once
 
+#include <Arduino.h>
 #include <ESP8266WiFi.h>
-#include "../config/WifiConfig.h"
 
 class WifiService
 {
 public:
-    static void connect()
-    {
-        WiFi.mode(WIFI_STA);
-        WiFi.setAutoReconnect(true);
-        WiFi.persistent(true);
-        // WiFi.config(LOCAL_IP, GATEWAY, SUBNET, PRIMARY_DNS, SECONDARY_DNS);
-        
-        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    static bool connect(unsigned long timeoutMs = 15000);
+    static void loop();
+    static bool isSetupMode();
+    static bool isConnected();
 
-        Serial.print("Connecting WiFi");
+private:
+    static bool setupMode;
+    static unsigned long lastReconnectAttempt;
 
-        while (WiFi.status() != WL_CONNECTED)
-        {
-            delay(500);
-            Serial.print(".");
-            
-            yield();
-        }
-
-        Serial.println("\nWiFi Connected");
-        Serial.print("IP: ");
-        Serial.println(WiFi.localIP());
-        Serial.print("Mac Address: ");
-        Serial.println(WiFi.macAddress());
-    }
+    static bool connectStation(unsigned long timeoutMs);
+    static void startSetupAccessPoint();
+    static void applyStaticIp();
+    static void setHostname();
 };

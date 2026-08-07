@@ -3,11 +3,20 @@
 #include "RegistrationService.h"
 #include "TimeService.h"
 #include "../core/HmacHelper.h"
-#include "../config/DeviceConfig.h"
+#include "../config/DeviceSettings.h"
 #include <ESP8266HTTPClient.h>
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ArduinoJson.h>
+
+static String buildServerUrl(const String& path)
+{
+    String serverUrl = DeviceSettings::serverUrl();
+    if (serverUrl.length() == 0) {
+        return "";
+    }
+    return serverUrl + path;
+}
 
 static void addHmacHeaders(HTTPClient& http, const String& secret,
                            const String& method, const String& path,
@@ -23,16 +32,15 @@ static void addHmacHeaders(HTTPClient& http, const String& secret,
 
 bool RailsClient::sendCoinEvent(const CoinEvent& event)
 {
+    String path = String("/api/coin_slot_sessions/") + event.sessionUid + "/coin_transactions";
+    String url = buildServerUrl(path);
+    if (url.length() == 0) {
+        Serial.println("[RAILS] server URL missing, skipping coin event");
+        return false;
+    }
+
     WiFiClient client;
     HTTPClient http;
-    
-    char url[256];
-    snprintf(url, sizeof(url), "%s/api/coin_slot_sessions/%s/coin_transactions",
-             SERVER_URL, event.sessionUid.c_str());
-    
-    char path[128];
-    snprintf(path, sizeof(path), "/api/coin_slot_sessions/%s/coin_transactions",
-             event.sessionUid.c_str());
     
     http.begin(client, url);
     http.addHeader("Content-Type", "application/json");
@@ -55,7 +63,6 @@ bool RailsClient::sendCoinEvent(const CoinEvent& event)
     int create_code = 201;
     bool success = (code == ok_code || code == create_code);
 
-    // 401 Unauthorized - differentiate between missing device and locked device
     if (code == 401) {
         String payload = http.getString();
         JsonDocument doc;
@@ -69,21 +76,15 @@ bool RailsClient::sendCoinEvent(const CoinEvent& event)
             Serial.printf("[RAILS] 401 Unauthorized: %s\n", payload.c_str());
         }
         
-        // Check if device is locked (invalid device) or missing
-        // Missing device: allow re-registration
-        // Locked device: wait for admin unlock
         if (detail.indexOf("locked") != -1 || detail.indexOf("Invalid") != -1 || detail.indexOf("Locked") != -1) {
-            // Invalid device - locked by admin, wait for unlock
             Serial.println("[RAILS] Device is locked, waiting for admin unlock");
             RegistrationService::setLocked(true);
         } else {
-            // Missing device - allow re-registration
             Serial.println("[RAILS] Device not registered, will re-register");
             RegistrationService::clearSecret();
         }
     }
 
-    // 422 with "transaction_uid has already been taken" means transaction was already recorded - treat as success
     if (code == 422) {
         String payload = http.getString();
         JsonDocument doc;
@@ -104,13 +105,18 @@ bool RailsClient::sendCoinEvent(const CoinEvent& event)
 
 bool RailsClient::registerCoinSlot(String& outSecret)
 {
+    String serverUrl = DeviceSettings::serverUrl();
+    if (serverUrl.length() == 0) {
+        Serial.println("[REG] server URL missing, cannot register");
+        return false;
+    }
+
     WiFiClient client;
     client.setTimeout(15000);
     HTTPClient http;
     http.setTimeout(15000);
     
-    char url[256];
-    snprintf(url, sizeof(url), "%s/api/coin_slots/register", SERVER_URL);
+    String url = serverUrl + "/api/coin_slots/register";
     
     http.begin(client, url);
     http.addHeader("Content-Type", "application/json");
@@ -119,13 +125,14 @@ bool RailsClient::registerCoinSlot(String& outSecret)
 
     String macAddress = WiFi.macAddress();
     String ipAddress = WiFi.localIP().toString();
+    String deviceName = DeviceSettings::deviceName();
     char deviceId[32];
     snprintf(deviceId, sizeof(deviceId), "esp-%u", ESP.getChipId());
 
     char body[256];
     snprintf(body, sizeof(body),
         "{\"coin_slot\":{\"name\":\"%s\",\"device_id\":\"%s\",\"mac_address\":\"%s\",\"ip_address\":\"%s\"}}",
-        DEVICE_NAME, deviceId, macAddress.c_str(), ipAddress.c_str());
+        deviceName.c_str(), deviceId, macAddress.c_str(), ipAddress.c_str());
     
     yield();
 
@@ -148,7 +155,6 @@ bool RailsClient::registerCoinSlot(String& outSecret)
         JsonDocument doc;
         DeserializationError err = deserializeJson(doc, payload);
         if (!err) {
-            // Force deep copy so String survives after doc is destroyed
             outSecret = String(doc["secret"].as<const char*>());
             Serial.printf("[REG] response code=%d secret=%s\n",
                         code, outSecret.c_str());
@@ -191,24 +197,26 @@ bool RailsClient::registerCoinSlot(String& outSecret)
 
 bool RailsClient::heartbeatCoinSlot(const String& secret, const String& deviceId)
 {
+    String serverUrl = DeviceSettings::serverUrl();
+    if (serverUrl.length() == 0) {
+        Serial.println("[HEARTBEAT] server URL missing, skipping");
+        return false;
+    }
+
     WiFiClient client;
     HTTPClient http;
     
-    char url[256];
-    snprintf(url, sizeof(url), "%s/api/coin_slots/%s/heartbeat",
-             SERVER_URL, deviceId.c_str());
-    
-    char path[128];
-    snprintf(path, sizeof(path), "/api/coin_slots/%s/heartbeat",
-             deviceId.c_str());
+    String path = "/api/coin_slots/" + deviceId + "/heartbeat";
+    String url = buildServerUrl(path);
     
     String macAddress = WiFi.macAddress();
     String ipAddress = WiFi.localIP().toString();
+    String deviceName = DeviceSettings::deviceName();
     
     char body[256];
     snprintf(body, sizeof(body),
-        "{\"coin_slot\":{\"ip_address\":\"%s\",\"mac_address\":\"%s\"}}",
-        ipAddress.c_str(), macAddress.c_str());
+        "{\"coin_slot\":{\"name\":\"%s\",\"ip_address\":\"%s\",\"mac_address\":\"%s\"}}",
+        deviceName.c_str(), ipAddress.c_str(), macAddress.c_str());
     
     http.begin(client, url);
     http.addHeader("Content-Type", "application/json");
@@ -219,7 +227,6 @@ bool RailsClient::heartbeatCoinSlot(const String& secret, const String& deviceId
     int code = http.POST(body);
     bool success = (code == 200);
 
-    // 401 Unauthorized - differentiate between missing device and locked device
     if (code == 401) {
         String payload = http.getString();
         JsonDocument doc;
@@ -233,13 +240,10 @@ bool RailsClient::heartbeatCoinSlot(const String& secret, const String& deviceId
             Serial.printf("[RAILS] heartbeat 401 Unauthorized: %s\n", payload.c_str());
         }
         
-        // Check if device is locked (invalid device) or missing
         if (detail.indexOf("locked") != -1 || detail.indexOf("Invalid") != -1 || detail.indexOf("Locked") != -1) {
-            // Invalid device - locked by admin, wait for unlock
             Serial.println("[RAILS] Device is locked, waiting for admin unlock");
             RegistrationService::setLocked(true);
         } else {
-            // Missing device - allow re-registration
             Serial.println("[RAILS] Device not registered, will re-register");
             RegistrationService::clearSecret();
         }
