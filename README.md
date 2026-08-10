@@ -45,6 +45,27 @@ Development builds enable debug-only routes such as:
 
 Release builds exclude those debug routes.
 
+## Hardware Setup
+
+The firmware currently uses one input and one output pin on the ESP8266:
+
+| Function | ESP8266 Pin | GPIO | Direction | Behavior |
+| --- | --- | --- | --- | --- |
+| Coin pulse input | D2 | GPIO4 | Input | Uses `INPUT_PULLUP` and counts falling-edge pulses |
+| Coin relay output | D1 | GPIO5 | Output | Active-low relay control: `LOW` enables, `HIGH` disables |
+
+Hardware components expected by the firmware:
+
+- ESP8266 board such as NodeMCU v2 / ESP-12E
+- Coin selector / coin acceptor with a pulse output
+- Relay module for coin gating
+
+Notes:
+
+- The coin pulse line is debounced in firmware.
+- The relay line is initialized as an output and defaults to disabled.
+- `DRY_RUN` in `src/config/AppConfig.h` can be used to disable actual hardware I/O for bench testing.
+
 ## Prerequisites
 
 - PlatformIO with the ESP8266 toolchain installed
