@@ -52,15 +52,17 @@ public:
             CoinController::disable(server);
         });
 
-        server.on("/debug/coin-insert", HTTP_POST, [&server]()
-        {
-            DebugController::coinDetectorSimulatePulse(server);
-        });
+        #ifdef ENV_DEVELOPMENT
+            server.on("/debug/coin-insert", HTTP_POST, [&server]()
+            { 
+                DebugController::coinDetectorSimulatePulse(server);
+            });
 
-        server.on("/debug/queue", HTTP_GET, [&server]()
-        {
-            DebugController::getQueue(server);
-        });
+            server.on("/debug/queue", HTTP_GET, [&server]()
+            {
+                DebugController::getQueue(server);
+            });
+        #endif
 
         server.on("/reboot", HTTP_POST, [&server]()
         {
