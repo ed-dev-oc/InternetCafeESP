@@ -269,7 +269,7 @@ input[type=checkbox]{width:auto;margin:0}
 .field-row{display:flex;align-items:flex-end;gap:16px;margin:12px 0}
 .field-row .field-input{flex:1;margin:0}
 .field-row .field-input input{margin-top:6px}
-.show-toggle{display:flex;align-items:center;gap:8px;margin:0px;white-space:nowrap;padding:10px 12px;border:1px solid #d7e3ff;border-radius:10px;background:#eef4ff;font-size:14px;font-weight:700;min-width:150px;justify-content:flex-start}
+.show-toggle{display:flex;align-items:center;gap:8px;margin:0px;white-space:nowrap;padding:10px 12px;border:1px solid #d7e3ff;border-radius:10px;background:#eef4ff;font-size:14px;font-weight:700;justify-content:flex-start}
 .field-row.password-row .show-toggle{align-self:flex-end}
 button{margin-top:18px;padding:12px 18px;border:0;border-radius:10px;background:#175cd3;color:#fff;font-size:16px;font-weight:700;cursor:pointer}
 code{background:#e8eef7;padding:2px 6px;border-radius:6px}
@@ -298,7 +298,7 @@ function togglePasswordVisibility(fieldId, checkbox) {
     html += renderInput("Device name", "device_name", DeviceSettings::deviceName());
     html += renderInput("Server URL", "server_url", DeviceSettings::serverUrl(), "url", "http://192.168.1.10:3000");
     html += renderInput("Wi-Fi SSID", "wifi_ssid", DeviceSettings::wifiSsid());
-    html += renderPasswordRow("Wi-Fi password", "wifi_password", "leave blank to keep current", "Show password");
+    html += renderPasswordRow("Wi-Fi password", "wifi_password", "leave blank to keep current", "Show");
     html += "<label><input name='use_static_ip' type='checkbox' value='1'";
     if (DeviceSettings::useStaticIp()) {
         html += " checked";
@@ -309,8 +309,8 @@ function togglePasswordVisibility(fieldId, checkbox) {
     html += renderIpInput("Subnet", "subnet", DeviceSettings::subnet());
     html += renderIpInput("Primary DNS", "primary_dns", DeviceSettings::primaryDns());
     html += renderIpInput("Secondary DNS", "secondary_dns", DeviceSettings::secondaryDns());
-    html += renderPasswordRow("Current admin password", "access_password", "required if one is already set", "Show password");
-    html += renderPasswordRow("New admin password", "admin_password", "optional", "Show password");
+    html += renderPasswordRow("Current admin password", "access_password", "required if one is already set", "Show");
+    html += renderPasswordRow("New admin password", "admin_password", "optional", "Show");
     html += "<button type='submit'>Save and reboot</button>";
     html += "</form>";
     html += "<p><small>Setup AP SSID: <code>" + htmlEscape(DeviceSettings::setupApSsid()) + "</code></small></p>";
