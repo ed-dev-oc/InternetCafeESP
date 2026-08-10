@@ -59,6 +59,40 @@ Hardware components expected by the firmware:
 - ESP8266 board such as NodeMCU v2 / ESP-12E
 - Coin selector / coin acceptor with a pulse output
 - Relay module for coin gating
+- 12V power supply for the external hardware, if your coin selector and relay module are 12V-rated
+
+### Power and Signal Wiring
+
+The power wiring is separate from the signal wiring:
+
+```mermaid
+flowchart LR
+    PSU["12V Power Supply"]
+    CoinSelector["Coin Selector / Coin Acceptor"]
+    Relay["Relay Module"]
+    ESP["ESP8266 Board"]
+    CoinGate["Coin Slot / Gate"]
+
+    PSU -->|"+12V"| CoinSelector
+    PSU -->|"+12V"| Relay
+    PSU -->|"GND / negative"| CoinSelector
+    PSU -->|"GND / negative"| Relay
+    PSU -->|"Common GND"| ESP
+
+    CoinSelector -->|"Pulse signal"| D2["D2 / GPIO4"]
+    D1["D1 / GPIO5"] -->|"Control signal"| Relay
+    Relay -->|"Enable / disable coin path"| CoinGate
+```
+
+Simple wiring summary:
+
+- The 12V power supply feeds the external hardware.
+- The negative side of the supply goes to the GND/common ground of the coin selector, relay module, and ESP8266 board.
+- The coin selector sends pulse signals into `D2`.
+- The ESP8266 sends a control signal from `D1` to the relay module.
+- The relay opens or closes the coin path.
+- `D1` is active-low, so `LOW` turns the relay on and `HIGH` turns it off.
+- Do not connect 12V directly to an ESP8266 GPIO pin.
 
 Notes:
 
