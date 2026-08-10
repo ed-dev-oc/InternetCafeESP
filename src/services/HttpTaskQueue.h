@@ -7,7 +7,7 @@
 class HttpTaskQueue {
 public:
   static void begin();
-  static void enqueue(const HttpTask& task);
+  static bool enqueue(const HttpTask& task);
   static bool hasReadyTask();
   static HttpTask peek();
   static void removeFirst();
@@ -15,17 +15,17 @@ public:
   static int size();
 
   // Convenience enqueuers
-  static void enqueueRegistration();
-  static void enqueueCoinEvent(const CoinEvent& event);
-  static void enqueueHeartbeat();
+  static bool enqueueRegistration();
+  static bool enqueueCoinEvent(const CoinEvent& event);
+  static bool enqueueHeartbeat();
   static void clear();
   static const std::vector<HttpTask>& getAllTasks();
   
 private:
   static std::vector<HttpTask> queue;
   static void sortQueue();
-  static void save();
-  static void load();
+  static bool save();
+  static bool load();
   static String generateId();
   static bool hasType(HttpTask::Type type);
 };

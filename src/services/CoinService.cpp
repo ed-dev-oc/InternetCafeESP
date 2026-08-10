@@ -89,9 +89,11 @@ void CoinService::processAccumulatedPulses()
     event.pulses = accumulatedPulses;
     event.createdAt = millis();
 
-    accumulatedPulses = 0;
-
-    HttpTaskQueue::enqueueCoinEvent(event);
-    Serial.printf("[QUEUE] event=%s session=%s pulses=%d\n",
-        event.id.c_str(), event.sessionUid.c_str(), event.pulses);
+    if (HttpTaskQueue::enqueueCoinEvent(event)) {
+        accumulatedPulses = 0;
+        Serial.printf("[QUEUE] event=%s session=%s pulses=%d\n",
+            event.id.c_str(), event.sessionUid.c_str(), event.pulses);
+    } else {
+        Serial.println("[COIN] failed to persist queued event, keeping pulses buffered");
+    }
 }

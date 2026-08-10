@@ -12,7 +12,7 @@ int RegistrationService::heartbeatFailCount = 0;
 void RegistrationService::begin() {
   load();
   if (registered) {
-    Serial.printf("[REG] loaded secret=%.10s, locked=%d\n", secret.c_str(), locked);
+    Serial.printf("[REG] loaded secret, locked=%d\n", locked);
   } else {
     Serial.println("[REG] no persisted secret, will register");
   }
@@ -46,7 +46,7 @@ void RegistrationService::setSecret(const String& newSecret) {
   locked = false;  // Clear locked state on successful registration
   heartbeatFailCount = 0;
   save();
-  Serial.printf("[REG] secret set and saved: %s\n", secret.c_str());
+  Serial.println("[REG] secret set and saved");
 }
 
 void RegistrationService::setLocked(bool lockedState) {

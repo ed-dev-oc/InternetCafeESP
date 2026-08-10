@@ -48,7 +48,7 @@ void SenderService::loop() {
     case HttpTask::COIN_EVENT: {
       CoinEvent event;
       event.id = task.id;
-      StaticJsonDocument<256> doc;
+      JsonDocument doc;
       deserializeJson(doc, task.payload);
       event.macAddress = doc["mac"].as<String>();
       event.sessionUid = doc["session_uid"].as<String>();
