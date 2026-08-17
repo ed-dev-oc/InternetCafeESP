@@ -2,10 +2,14 @@
 
 #include <ArduinoJson.h>
 #include <ESP8266WiFi.h>
+#include <LittleFS.h>
 
 #include "../core/HmacHelper.h"
 #include "../config/DeviceSettings.h"
 #include "../core/WifiService.h"
+#include "../services/HttpTaskQueue.h"
+#include "../services/RegistrationService.h"
+#include "../services/SessionContext.h"
 
 namespace {
 String htmlEscape(const String& value)
@@ -250,10 +254,26 @@ String renderStatusPage(const char* title, const char* message, const char* link
     return html;
 }
 
+String renderResetSection()
+{
+    String html;
+    html.reserve(4096);
+    html += "<section class='danger-card'>";
+    html += "<h2>Factory reset</h2>";
+    html += "<p>This will erase the saved Wi-Fi, device, registration, session, and queue data, then reboot into setup mode.</p>";
+    html += "<p><strong>Type RESET to confirm.</strong> This action cannot be undone.</p>";
+    html += "<form method='post' action='/factory-reset'>";
+    html += renderPasswordRow("Admin password", "reset_access_password", "required to factory reset", "Show");
+    html += renderInput("Confirmation", "confirm_reset", "", "text", "RESET");
+    html += "<button class='danger-button' type='submit'>Erase and reboot</button>";
+    html += "</form></section>";
+    return html;
+}
+
 String renderPage()
 {
     String html;
-    html.reserve(11264);
+    html.reserve(14000);
     html += "<!doctype html><html><head><meta charset='utf-8'>";
     html += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
     html += "<title>ESP Configuration</title>";
@@ -262,7 +282,9 @@ String renderPage()
 body{font-family:Arial,sans-serif;max-width:900px;margin:0 auto;padding:24px;background:#f4f7fb;color:#132238}
 h1{margin:0 0 12px}
 p,small{line-height:1.5}
-form{background:#fff;padding:20px;border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.08)}
+form,.danger-card{background:#fff;padding:20px;border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.08)}
+.danger-card{margin-top:20px;border:1px solid #ffd5d2;background:linear-gradient(180deg,#fff7f6 0%,#fff 100%)}
+h2{margin:0 0 10px;font-size:1.15rem}
 label{display:block;margin:12px 0;font-weight:600}
 input{width:100%;box-sizing:border-box;padding:10px 12px;margin-top:6px;border:1px solid #cfd7e3;border-radius:10px;font-size:16px}
 input[type=checkbox]{width:auto;margin:0}
@@ -272,6 +294,8 @@ input[type=checkbox]{width:auto;margin:0}
 .show-toggle{display:flex;align-items:center;gap:8px;margin:0px;white-space:nowrap;padding:10px 12px;border:1px solid #d7e3ff;border-radius:10px;background:#eef4ff;font-size:14px;font-weight:700;justify-content:flex-start}
 .field-row.password-row .show-toggle{align-self:flex-end}
 button{margin-top:18px;padding:12px 18px;border:0;border-radius:10px;background:#175cd3;color:#fff;font-size:16px;font-weight:700;cursor:pointer}
+button.danger-button{background:#b42318}
+button.danger-button:hover{background:#962016}
 code{background:#e8eef7;padding:2px 6px;border-radius:6px}
 </style>
 <script>
@@ -313,6 +337,7 @@ function togglePasswordVisibility(fieldId, checkbox) {
     html += renderPasswordRow("New admin password", "admin_password", "optional", "Show");
     html += "<button type='submit'>Save and reboot</button>";
     html += "</form>";
+    html += renderResetSection();
     html += "<p><small>Setup AP SSID: <code>" + htmlEscape(DeviceSettings::setupApSsid()) + "</code></small></p>";
     html += "</body></html>";
     return html;
@@ -336,6 +361,21 @@ String jsonStatus(bool includeSecrets)
 bool saveDeviceSettings()
 {
     return DeviceSettings::save();
+}
+
+bool removeIfPresent(const char* path)
+{
+    if (!LittleFS.exists(path)) {
+        return true;
+    }
+
+    if (!LittleFS.remove(path)) {
+        Serial.printf("[RESET] failed to remove %s\n", path);
+        return false;
+    }
+
+    Serial.printf("[RESET] removed %s\n", path);
+    return true;
 }
 
 void saveAndReplyHtml(ESP8266WebServer& server, const char* message)
@@ -374,6 +414,43 @@ void saveAndReplyJson(ESP8266WebServer& server, const char* message)
     delay(1000);
     ESP.restart();
 }
+
+bool wipeFactoryResetState()
+{
+    bool ok = true;
+
+    DeviceSettings::resetToDefaults();
+    SessionContext::clear();
+    HttpTaskQueue::clear();
+    RegistrationService::clearSecret();
+
+    WiFi.disconnect(true);
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_OFF);
+    delay(100);
+
+    ok &= removeIfPresent("/device_settings.json");
+    ok &= removeIfPresent("/secret.txt");
+    ok &= removeIfPresent("/http_queue.jsonl");
+    ok &= removeIfPresent("/http_queue.jsonl.tmp");
+    ok &= removeIfPresent("/http_queue.csv");
+    ok &= removeIfPresent("/session.txt");
+
+    return ok;
+}
+
+void sendResetReply(ESP8266WebServer& server)
+{
+    server.send(200, "text/html", renderStatusPage(
+        "Factory reset complete",
+        "All stored device data was erased. The ESP is rebooting into setup mode now.",
+        "Return to config",
+        "/config",
+        false
+    ));
+    delay(1000);
+    ESP.restart();
+}
 }
 
 void ConfigController::handleIndex(ESP8266WebServer& server)
@@ -383,7 +460,7 @@ void ConfigController::handleIndex(ESP8266WebServer& server)
 
 void ConfigController::handleLocalSave(ESP8266WebServer& server)
 {
-    String accessPassword = server.arg("access_password");
+    String accessPassword = server.arg("reset_access_password");
     if (!DeviceSettings::adminPasswordMatches(accessPassword)) {
         server.send(401, "text/html", renderStatusPage(
             "Unauthorized",
@@ -397,6 +474,48 @@ void ConfigController::handleLocalSave(ESP8266WebServer& server)
 
     applyConfigValues(server, nullptr);
     saveAndReplyHtml(server, "Your settings were saved successfully. The ESP is rebooting now.");
+}
+
+void ConfigController::handleLocalReset(ESP8266WebServer& server)
+{
+    String accessPassword = server.arg("reset_access_password");
+    if (!DeviceSettings::adminPasswordMatches(accessPassword)) {
+        server.send(401, "text/html", renderStatusPage(
+            "Unauthorized",
+            "The current admin password is incorrect.",
+            "Back to config",
+            "/config",
+            true
+        ));
+        return;
+    }
+
+    String confirmation = server.arg("confirm_reset");
+    confirmation.trim();
+    confirmation.toUpperCase();
+    if (confirmation != "RESET") {
+        server.send(400, "text/html", renderStatusPage(
+            "Confirmation required",
+            "Type RESET in the confirmation field before factory resetting the device.",
+            "Back to config",
+            "/config",
+            true
+        ));
+        return;
+    }
+
+    if (!wipeFactoryResetState()) {
+        server.send(500, "text/html", renderStatusPage(
+            "Reset failed",
+            "The ESP could not remove every stored file. Please try again.",
+            "Back to config",
+            "/config",
+            true
+        ));
+        return;
+    }
+
+    sendResetReply(server);
 }
 
 void ConfigController::handleRemoteGet(ESP8266WebServer& server)
@@ -425,8 +544,3 @@ void ConfigController::handleRemoteSave(ESP8266WebServer& server)
     applyConfigValues(server, &doc);
     saveAndReplyJson(server, "remote settings saved");
 }
-
-
-
-
-

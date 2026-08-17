@@ -27,6 +27,11 @@ public:
             ConfigController::handleLocalSave(server);
         });
 
+        server.on("/factory-reset", HTTP_POST, [&server]()
+        {
+            ConfigController::handleLocalReset(server);
+        });
+
         server.on("/api/device/config", HTTP_GET, [&server]()
         {
             ConfigController::handleRemoteGet(server);
@@ -54,7 +59,7 @@ public:
 
         #ifdef ENV_DEVELOPMENT
             server.on("/debug/coin-insert", HTTP_POST, [&server]()
-            { 
+            {
                 DebugController::coinDetectorSimulatePulse(server);
             });
 
